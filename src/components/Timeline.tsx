@@ -45,10 +45,10 @@ export const Timeline: React.FC<TimelineProps> = ({ cards, onPlaceCard, isPlacin
               </div>
             )}
             
-            <GameCard 
-              card={card} 
-              isMiniature={true} 
-              isFocused={focusedIndex === index}
+            <GameCard
+              card={card}
+              isMiniature={true}
+              isFlipped={focusedIndex === index}
               onClick={() => handleCardClick(index)}
             />
             
