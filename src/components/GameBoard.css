@@ -1,0 +1,308 @@
+.game-board {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: radial-gradient(circle at center, var(--surface-high) 0%, var(--background) 100%);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.game-header {
+  width: 100%;
+  padding: 0.8rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--ghost-border);
+}
+
+.game-header .title {
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  color: var(--neon-primary);
+  text-shadow: 0 0 10px var(--neon-dim);
+  margin: 0;
+}
+
+/* ── Scoreboard ── */
+.scoreboard {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.score-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ghost-border);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+
+.score-chip.active {
+  background: rgba(204, 151, 255, 0.15);
+  border-color: var(--neon-secondary);
+  box-shadow: 0 0 12px rgba(204, 151, 255, 0.3);
+}
+
+.score-name {
+  color: var(--text-secondary);
+}
+
+.score-chip.active .score-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.score-points {
+  background: var(--neon-primary);
+  color: #000;
+  font-weight: bold;
+  font-size: 0.8rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Switching Overlay ── */
+.switching-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: radial-gradient(circle at center, rgba(30, 10, 60, 0.97) 0%, rgba(0, 0, 0, 0.99) 100%);
+  animation: switchSlideIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes switchSlideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+.switching-content {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem;
+}
+
+.switching-emoji {
+  font-size: 4rem;
+  display: block;
+  margin-bottom: 0.3rem;
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.6) both;
+}
+
+.switching-prev-name {
+  font-size: 1.6rem;
+  font-weight: bold;
+  color: #fff;
+  margin: 0;
+}
+
+.switching-result-text {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.switching-divider {
+  width: 120px;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--neon-secondary), transparent);
+}
+
+.switching-next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.switching-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+.switching-next-name {
+  font-size: 2.5rem;
+  font-weight: bold;
+  font-family: 'Space Grotesk', sans-serif;
+  margin: 0;
+  animation: popIn 0.5s 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.6) both;
+}
+
+.switching-hint {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+  margin: 0;
+  animation: pulse 1.8s infinite ease-in-out;
+}
+
+.player-prompt {
+  font-size: 1.1rem;
+  margin-bottom: 0.4rem;
+  color: var(--text-primary);
+}
+
+.wheel-placeholder {
+  padding: 0.5rem 1.5rem;
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--neon-secondary);
+}
+
+.play-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-top: 2rem;
+}
+
+.active-card-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  animation: floatIn 0.5s ease-out;
+}
+
+@keyframes floatIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.audio-controls {
+  display: flex;
+  gap: 1rem;
+}
+
+.empty-play-area {
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-area {
+  width: 100%;
+  margin-top: auto;
+  padding-bottom: 2rem;
+}
+
+.neon-text {
+  color: var(--neon-primary);
+  text-shadow: 0 0 10px var(--neon-dim);
+}
+
+/* Flying card wrapper — used to apply animation classes */
+.flying-card-wrap {
+  position: relative;
+  transform-origin: center center;
+}
+
+/* Result box — compact pill below the card */
+.result-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.6) both;
+  border: 1px solid transparent;
+}
+
+.result-box.correct {
+  background: rgba(0, 220, 100, 0.18);
+  border-color: rgba(0, 220, 100, 0.5);
+  color: #a0ffcc;
+}
+
+.result-box.wrong {
+  background: rgba(255, 60, 60, 0.18);
+  border-color: rgba(255, 60, 60, 0.5);
+  color: #ffaaaa;
+}
+
+.result-box .result-icon {
+  font-size: 1.4rem;
+}
+
+.result-box .result-message {
+  font-size: 0.95rem;
+}
+
+/* Done state — next player button */
+.btn-next-player {
+  background: linear-gradient(135deg, var(--neon-secondary) 0%, var(--neon-primary) 100%);
+  color: #000;
+  font-weight: bold;
+  font-size: 1.05rem;
+  padding: 0.8rem 2rem;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+}
+
+.btn-next-player:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 30px rgba(0, 255, 204, 0.5);
+}
+
+.turn-result-summary {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.hint-text {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+  max-width: 300px;
+  opacity: 0.7;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1; }
+}

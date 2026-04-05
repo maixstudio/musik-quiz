@@ -1,0 +1,235 @@
+/* ===== Flip Wrapper ===== */
+.card-flip-wrapper {
+  perspective: 1200px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.card-flip-wrapper.full-size {
+  width: 250px;
+  height: 300px;
+}
+
+.card-flip-wrapper.miniature {
+  width: 130px;
+  height: 180px;
+  margin-left: -30px;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+              box-shadow 0.2s ease;
+  box-shadow: -4px 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.card-flip-wrapper.miniature:first-child {
+  margin-left: 0;
+}
+
+/* ===== The Inner Flipper (holds both faces) ===== */
+.card-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: transform 0.65s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/* Back face starts facing the user */
+.card-face-back {
+  transform: rotateY(0deg);
+  background: var(--surface-high);
+  border: 1px solid var(--ghost-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Front face starts rotated away */
+.card-face-front {
+  transform: rotateY(180deg);
+  background: #000;
+}
+
+/* When .flipped is added: back goes away, front comes in */
+.card-flip-wrapper.flipped .card-face-back {
+  transform: rotateY(-180deg);
+}
+
+.card-flip-wrapper.flipped .card-face-front {
+  transform: rotateY(0deg);
+}
+
+/* ===== Cover Area ===== */
+.cover-area {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.cover-area img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholder-cover {
+  font-size: 4rem;
+  color: var(--neon-dim);
+  text-shadow: 0 0 10px var(--neon-primary);
+}
+
+.overlay-details {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.5) 55%,
+    transparent 100%
+  );
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0.8rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.year-badge {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: var(--neon-primary);
+  text-shadow: 0 0 8px rgba(0, 255, 204, 0.5);
+  margin-bottom: 0.15rem;
+}
+
+.title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.1rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artist {
+  font-size: 0.8rem;
+  color: #ccc;
+  margin: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== Hidden Backside Styling ===== */
+.hidden-back {
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, #1e1030 0%, #111 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed rgba(204, 151, 255, 0.3);
+  box-sizing: border-box;
+  border-radius: 1rem;
+}
+
+.hidden-back .mystery-icon {
+  font-size: 3.5rem;
+  margin-bottom: 0.4rem;
+  color: var(--neon-secondary);
+  font-style: normal;
+}
+
+.hidden-back .mystery-text {
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--neon-dim);
+  text-align: center;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  line-height: 1.6;
+}
+
+/* ===== Miniature Overrides ===== */
+.card-flip-wrapper.miniature .overlay-details {
+  padding: 0.4rem;
+}
+
+.card-flip-wrapper.miniature .year-badge {
+  font-size: 1rem;
+}
+
+.card-flip-wrapper.miniature .title {
+  font-size: 0.7rem;
+}
+
+.card-flip-wrapper.miniature .artist {
+  font-size: 0.6rem;
+}
+
+.card-flip-wrapper.miniature .hidden-back .mystery-icon {
+  font-size: 2rem;
+}
+
+.card-flip-wrapper.miniature .hidden-back .mystery-text {
+  font-size: 0.55rem;
+}
+
+/* Hover only when NOT in placing mode */
+.timeline-container:not(.is-placing) .card-flip-wrapper.miniature:hover {
+  transform: scale(1.5) translateY(-20px);
+  z-index: 100;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8);
+}
+
+/* ===== Fly-to-timeline animation (correct placement) ===== */
+@keyframes fly-to-slot {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1.08) translateY(-12px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.35) translateY(140vh);
+    opacity: 0;
+  }
+}
+
+/* ===== Trash animation (wrong placement) ===== */
+@keyframes fly-to-trash {
+  0% {
+    transform: scale(1) translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1.05) translate(10px, -10px) rotate(3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.1) translate(-90vw, -80vh) rotate(-25deg);
+    opacity: 0;
+  }
+}
+
+.flying-card-wrap.anim-correct {
+  animation: fly-to-slot 0.7s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+.flying-card-wrap.anim-wrong {
+  animation: fly-to-trash 0.6s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
