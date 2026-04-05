@@ -21,8 +21,11 @@ interface SongSearchProps {
   activeSong: Song;
   /** All songs in the playlist — for autocomplete lookups */
   allSongs: Song[];
-  /** Called when player clicks "Eingabe bestätigen" */
-  onSubmit: (result: GuessResult) => void;
+  /**
+   * Called when player clicks "Weiter →".
+   * Passes the guess (title/artist can be empty strings if not entered).
+   */
+  onConfirm: (result: GuessResult) => void;
   disabled?: boolean;
 }
 
@@ -30,7 +33,6 @@ const normalize = (s: string) => s.toLowerCase().trim();
 const partialMatch = (haystack: string, needle: string) =>
   normalize(haystack).includes(normalize(needle));
 
-// Deduplicate by a key
 function dedupeBy<T>(arr: T[], key: (item: T) => string): T[] {
   const seen = new Set<string>();
   return arr.filter((item) => {
@@ -44,7 +46,7 @@ function dedupeBy<T>(arr: T[], key: (item: T) => string): T[] {
 export const SongSearch: React.FC<SongSearchProps> = ({
   activeSong,
   allSongs,
-  onSubmit,
+  onConfirm,
   disabled,
 }) => {
   const [titleVal, setTitleVal] = useState("");
@@ -54,7 +56,6 @@ export const SongSearch: React.FC<SongSearchProps> = ({
   const [openFor, setOpenFor] = useState<"title" | "artist" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) {
@@ -65,27 +66,21 @@ export const SongSearch: React.FC<SongSearchProps> = ({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ── Title search — shows ONLY titles, no artist info ────────────────────
+  // ── Title search — ONLY titles shown ─────────────────────────────────────
   const handleTitleChange = (val: string) => {
     setTitleVal(val);
     if (val.length < 1) { setTitleSugs([]); return; }
-    const filtered = allSongs
-      .filter((s) => partialMatch(s.track_name, val))
-      .map((s) => s.track_name);
-    const unique = dedupeBy(filtered, normalize);
-    setTitleSugs(unique.slice(0, 8));
+    const filtered = allSongs.filter((s) => partialMatch(s.track_name, val)).map((s) => s.track_name);
+    setTitleSugs(dedupeBy(filtered, normalize).slice(0, 8));
     setOpenFor("title");
   };
 
-  // ── Artist search — shows ONLY artist names, no title info ──────────────
+  // ── Artist search — ONLY artist names shown ───────────────────────────────
   const handleArtistChange = (val: string) => {
     setArtistVal(val);
     if (val.length < 1) { setArtistSugs([]); return; }
-    const filtered = allSongs
-      .filter((s) => partialMatch(s.artist, val))
-      .map((s) => s.artist);
-    const unique = dedupeBy(filtered, normalize);
-    setArtistSugs(unique.slice(0, 8));
+    const filtered = allSongs.filter((s) => partialMatch(s.artist, val)).map((s) => s.artist);
+    setArtistSugs(dedupeBy(filtered, normalize).slice(0, 8));
     setOpenFor("artist");
   };
 
@@ -101,29 +96,28 @@ export const SongSearch: React.FC<SongSearchProps> = ({
     setOpenFor(null);
   };
 
-  const handleSubmit = () => {
+  /** Lock in whatever was typed (or nothing) and proceed to placement step */
+  const handleConfirm = () => {
+    setOpenFor(null);
     const titleCorrect = normalize(titleVal) === normalize(activeSong.track_name);
     const artistCorrect = normalize(artistVal) === normalize(activeSong.artist);
-    onSubmit({ titleInput: titleVal, artistInput: artistVal, titleCorrect, artistCorrect });
+    onConfirm({ titleInput: titleVal, artistInput: artistVal, titleCorrect, artistCorrect });
   };
-
-  const canSubmit = !disabled && (titleVal.trim() !== "" || artistVal.trim() !== "");
 
   return (
     <div className="song-search-root" ref={containerRef}>
       <div className="song-search-fields">
-        {/* ── Title field ── */}
+        {/* Title field */}
         <div className="song-search-field-wrap">
           <label className="song-search-label">🎵 Titel</label>
           <input
             className="song-search-input"
             value={titleVal}
-            placeholder="Songtitel eingeben..."
+            placeholder="Songtitel (optional)..."
             disabled={disabled}
             onChange={(e) => handleTitleChange(e.target.value)}
             onFocus={() => titleVal && setOpenFor("title")}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { setOpenFor(null); }
               if (e.key === "Escape") { setTitleSugs([]); setOpenFor(null); }
             }}
             autoComplete="off"
@@ -139,18 +133,17 @@ export const SongSearch: React.FC<SongSearchProps> = ({
           )}
         </div>
 
-        {/* ── Artist field ── */}
+        {/* Artist field */}
         <div className="song-search-field-wrap">
           <label className="song-search-label">🎤 Interpret</label>
           <input
             className="song-search-input"
             value={artistVal}
-            placeholder="Künstlername eingeben..."
+            placeholder="Künstler (optional)..."
             disabled={disabled}
             onChange={(e) => handleArtistChange(e.target.value)}
             onFocus={() => artistVal && setOpenFor("artist")}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { setOpenFor(null); }
               if (e.key === "Escape") { setArtistSugs([]); setOpenFor(null); }
             }}
             autoComplete="off"
@@ -169,10 +162,10 @@ export const SongSearch: React.FC<SongSearchProps> = ({
 
       <button
         className="song-search-btn"
-        disabled={!canSubmit}
-        onClick={handleSubmit}
+        disabled={disabled}
+        onClick={handleConfirm}
       >
-        ✓ Eingabe bestätigen
+        Weiter →
       </button>
     </div>
   );

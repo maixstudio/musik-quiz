@@ -12,28 +12,38 @@ import { getFreshPreviewUrl } from "@/app/actions/getDeezerPreview";
 import "./GameBoard.css";
 
 // ─── Phase machine ────────────────────────────────────────────────────────────
-// idle      → song ziehen
-// guessing  → Slot auswählen + Suche + 29s-Timer
+// idle      → Song ziehen
+// entering  → Song spielt, Timer läuft, Textfelder aktiv
+//              → "Weiter →"  →  placing
+//              → "Überspringen" →  placing (ohne Texteingabe)
+// placing   → Textguess gesperrt, Karte muss in Zeitstrahl eingeordnet werden
 // flipping  → Karte dreht sich (700ms)
-// result    → Ergebnis-Box sichtbar (auto 2s → animating)
+// result    → Ergebnis-Box sichtbar (2s auto → animating)
 // animating → Karte fliegt weg (700ms) → done
 // done      → „Nächster Spieler"-Button sichtbar
 // switching → Vollbild-Overlay (2s auto → idle)
-type Phase = "idle" | "guessing" | "flipping" | "result" | "animating" | "done" | "switching";
+type Phase =
+  | "idle"
+  | "entering"
+  | "placing"
+  | "flipping"
+  | "result"
+  | "animating"
+  | "done"
+  | "switching";
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 // Position richtig           → +1 Basispunkt
 // + Titel richtig eingegeben → +1 Bonuspunkt
 // + Interpret richtig        → +1 Bonuspunkt
-// Position falsch            → 0 Punkte (auch wenn Titel/Interpret korrekt)
-
+// Position falsch            → 0 Punkte  (auch wenn Titel/Interpret korrekt)
 const GUESS_SECONDS = 29;
 
 interface ScoreBreakdown {
   positionCorrect: boolean;
   titleCorrect: boolean;
   artistCorrect: boolean;
-  total: number; // 0–3
+  total: number;
 }
 
 interface GameBoardProps {
@@ -58,12 +68,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
+  const [lockedGuess, setLockedGuess] = useState<GuessResult | null>(null);
   const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown | null>(null);
-  const [guessResult, setGuessResult] = useState<GuessResult | null>(null);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [animClass, setAnimClass] = useState<"" | "anim-correct" | "anim-wrong">("");
 
-  // 29s countdown
+  // 29s countdown (only during "entering" phase)
   const [countdown, setCountdown] = useState(GUESS_SECONDS);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -71,13 +81,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearTimer = () => { if (timerRef.current) clearTimeout(timerRef.current); timerRef.current = null; };
-  const clearSwitchTimer = () => { if (switchTimerRef.current) clearTimeout(switchTimerRef.current); switchTimerRef.current = null; };
-
+  const clearTimer = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  };
+  const clearSwitchTimer = () => {
+    if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
+    switchTimerRef.current = null;
+  };
   const stopCountdown = useCallback(() => {
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
   }, []);
-
   const startCountdown = useCallback(() => {
     stopCountdown();
     setCountdown(GUESS_SECONDS);
@@ -127,19 +141,30 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     setIsCardFlipped(false);
     setAnimClass("");
     setScoreBreakdown(null);
-    setGuessResult(null);
-    setPhase("guessing");
+    setLockedGuess(null);
+    setPhase("entering");
     startCountdown();
   };
 
-  // ── Place card (called after search OR direct timeline click) ─────────────
-  // guess is optional — if not passed, only position is scored
-  const placeCard = useCallback((
-    index: number,
-    guess?: GuessResult
-  ) => {
-    if (!activeCard) return;
+  // ── Confirm text guess → move to placing ─────────────────────────────────
+  const handleConfirmGuess = useCallback((guess: GuessResult) => {
     stopCountdown();
+    setLockedGuess(guess);
+    setPhase("placing");
+    log(`🔒 Guess locked — title:${guess.titleInput || "—"} artist:${guess.artistInput || "—"}`);
+  }, [stopCountdown]);
+
+  // ── Skip text entry, go straight to placing ───────────────────────────────
+  const handleSkipToPlacing = useCallback(() => {
+    stopCountdown();
+    setLockedGuess(null);
+    setPhase("placing");
+    log("⏭ Skipped text entry");
+  }, [stopCountdown]);
+
+  // ── Timeline click (placing phase only) ──────────────────────────────────
+  const handlePlaceCard = useCallback((index: number) => {
+    if (!activeCard || phase !== "placing") return;
 
     const currentTimeline = playerTimelines[currentPlayerIdx];
     const prevYear = index > 0 ? currentTimeline[index - 1].song.release_year : -Infinity;
@@ -147,44 +172,24 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     const cardYear = activeCard.song.release_year;
     const positionCorrect = cardYear >= prevYear && cardYear <= nextYear;
 
-    const titleCorrect = positionCorrect && !!guess?.titleCorrect;
-    const artistCorrect = positionCorrect && !!guess?.artistCorrect;
-    const total = positionCorrect ? 1 + (titleCorrect ? 1 : 0) + (artistCorrect ? 1 : 0) : 0;
+    const titleCorrect = positionCorrect && (lockedGuess?.titleCorrect ?? false);
+    const artistCorrect = positionCorrect && (lockedGuess?.artistCorrect ?? false);
+    const total = positionCorrect
+      ? 1 + (titleCorrect ? 1 : 0) + (artistCorrect ? 1 : 0)
+      : 0;
 
-    log(`📍 idx=${index} year=${cardYear} → pos:${positionCorrect} title:${titleCorrect} artist:${artistCorrect} total:${total}`);
+    log(`📍 idx=${index} year=${cardYear} → pos:${positionCorrect} title:${titleCorrect} artist:${artistCorrect} pts:${total}`);
 
     const breakdown: ScoreBreakdown = { positionCorrect, titleCorrect, artistCorrect, total };
     setScoreBreakdown(breakdown);
     setPendingIndex(positionCorrect ? index : null);
-    setGuessResult(guess ?? null);
     audioRef.current?.pause();
 
     setIsCardFlipped(true);
     setPhase("flipping");
     clearTimer();
     timerRef.current = setTimeout(() => setPhase("result"), 700);
-  }, [activeCard, playerTimelines, currentPlayerIdx, stopCountdown]);
-
-  // ── Timeline click (no text guess) ───────────────────────────────────────
-  const handlePlaceCard = useCallback((index: number) => {
-    if (phase !== "guessing") return;
-    placeCard(index);
-  }, [phase, placeCard]);
-
-  // ── Search submit ─────────────────────────────────────────────────────────
-  const handleSearchSubmit = useCallback((guess: GuessResult) => {
-    if (!activeCard || phase !== "guessing") return;
-    // Find best chronological slot
-    const timeline = playerTimelines[currentPlayerIdx];
-    let bestIndex = timeline.length;
-    for (let i = 0; i < timeline.length; i++) {
-      if (activeCard.song.release_year <= timeline[i].song.release_year) {
-        bestIndex = i;
-        break;
-      }
-    }
-    placeCard(bestIndex, guess);
-  }, [activeCard, phase, playerTimelines, currentPlayerIdx, placeCard]);
+  }, [activeCard, phase, playerTimelines, currentPlayerIdx, lockedGuess]);
 
   // ── Dismiss result → start animation ─────────────────────────────────────
   const handleDismissResult = useCallback(() => {
@@ -210,7 +215,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
 
     setPhase("animating");
     setAnimClass(isCorrect ? "anim-correct" : "anim-wrong");
-
     timerRef.current = setTimeout(() => {
       setActiveCard(null);
       setAnimClass("");
@@ -229,9 +233,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   }, [phase, handleDismissResult]);
 
   // ── Next player ───────────────────────────────────────────────────────────
-  const handleNextPlayer = () => {
-    setPhase(players.length > 1 ? "switching" : "idle");
-  };
+  const handleNextPlayer = () => setPhase(players.length > 1 ? "switching" : "idle");
 
   // ── Switch player ─────────────────────────────────────────────────────────
   const handleSwitchPlayer = useCallback(() => {
@@ -256,10 +258,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const currentPlayer = players[currentPlayerIdx];
   const prevPlayer = players[(currentPlayerIdx + players.length - 1) % players.length];
   const nextPlayer = players[(currentPlayerIdx + 1) % players.length];
-  const timerProgress = countdown / GUESS_SECONDS;
-  const timerDanger = countdown <= 10;
   const prevPlayerScore = playerScores[(currentPlayerIdx + players.length - 1) % players.length];
   const totalPointsThisTurn = scoreBreakdown?.total ?? 0;
+
+  const timerProgress = countdown / GUESS_SECONDS;
+  const timerDanger = countdown <= 10;
+
+  // Timeline is "active" (drop zones visible) only in placing phase
+  const isPlacing = phase === "placing";
 
   return (
     <div className="game-board">
@@ -304,8 +310,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
       <div className="play-area">
         {activeCard ? (
           <div className="active-card-container">
-            {/* Countdown ring */}
-            {phase === "guessing" && (
+            {/* Countdown ring — only during text entry */}
+            {phase === "entering" && (
               <div className={`countdown-ring ${timerDanger ? "danger" : ""}`}>
                 <svg viewBox="0 0 44 44" className="countdown-svg">
                   <circle className="countdown-bg" cx="22" cy="22" r="18" />
@@ -332,25 +338,47 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
                 <div className="result-breakdown">
                   <div className="result-row">
                     <span>{scoreBreakdown.positionCorrect ? "✅" : "❌"}</span>
-                    <span>Position{scoreBreakdown.positionCorrect ? ` (${activeCard.song.release_year})` : ` — war ${activeCard.song.release_year}`}</span>
+                    <span>
+                      Position
+                      {scoreBreakdown.positionCorrect
+                        ? ` (${activeCard.song.release_year})`
+                        : ` — war ${activeCard.song.release_year}`}
+                    </span>
                     <span className="result-pts">{scoreBreakdown.positionCorrect ? "+1" : "0"}</span>
                   </div>
-                  {guessResult && (
+                  {lockedGuess && (
                     <>
                       <div className="result-row bonus">
                         <span>{scoreBreakdown.titleCorrect ? "🎵" : "—"}</span>
-                        <span>Titel{scoreBreakdown.titleCorrect ? " korrekt" : guessResult.titleInput ? ` (war: ${activeCard.song.track_name})` : " nicht eingegeben"}</span>
+                        <span>
+                          Titel
+                          {scoreBreakdown.titleCorrect
+                            ? " korrekt"
+                            : lockedGuess.titleInput
+                            ? ` (war: ${activeCard.song.track_name})`
+                            : " nicht eingegeben"}
+                        </span>
                         <span className="result-pts">{scoreBreakdown.titleCorrect ? "+1" : "0"}</span>
                       </div>
                       <div className="result-row bonus">
                         <span>{scoreBreakdown.artistCorrect ? "🎤" : "—"}</span>
-                        <span>Interpret{scoreBreakdown.artistCorrect ? " korrekt" : guessResult.artistInput ? ` (war: ${activeCard.song.artist})` : " nicht eingegeben"}</span>
+                        <span>
+                          Interpret
+                          {scoreBreakdown.artistCorrect
+                            ? " korrekt"
+                            : lockedGuess.artistInput
+                            ? ` (war: ${activeCard.song.artist})`
+                            : " nicht eingegeben"}
+                        </span>
                         <span className="result-pts">{scoreBreakdown.artistCorrect ? "+1" : "0"}</span>
                       </div>
                     </>
                   )}
                   <div className="result-total">
-                    Gesamt: <strong>{scoreBreakdown.total} Punkt{scoreBreakdown.total !== 1 ? "e" : ""}</strong>
+                    Gesamt:{" "}
+                    <strong>
+                      {scoreBreakdown.total} Punkt{scoreBreakdown.total !== 1 ? "e" : ""}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -365,7 +393,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
                   src={activeCard.song.preview_url}
                   autoPlay
                   onPlay={() => log(`▶ ${activeCard.song.track_name}`)}
-                  onError={(e) => log(`❌ Audio error:`, (e.target as HTMLAudioElement).error?.message)}
+                  onError={(e) =>
+                    log(`❌ Audio error:`, (e.target as HTMLAudioElement).error?.message)
+                  }
                 />
               ) : (
                 <span style={{ color: "var(--text-secondary)", fontStyle: "italic" }}>
@@ -374,17 +404,40 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
               )}
             </div>
 
-            {/* Song search */}
-            {phase === "guessing" && (
+            {/* ── Step 1: Text entry ── */}
+            {phase === "entering" && (
               <div className="guessing-zone">
+                <div className="step-label">Schritt 1 von 2 — Titel &amp; Interpret raten</div>
                 <SongSearch
-                  activeSong={{ id: activeCard.song.id, track_name: activeCard.song.track_name, artist: activeCard.song.artist }}
+                  activeSong={{
+                    id: activeCard.song.id,
+                    track_name: activeCard.song.track_name,
+                    artist: activeCard.song.artist,
+                  }}
                   allSongs={allSongs}
-                  onSubmit={handleSearchSubmit}
+                  onConfirm={handleConfirmGuess}
                 />
-                <p className="hint-text">
-                  Titel &amp; Interpret eingeben — oder direkt Position in der Zeitleiste wählen.
-                </p>
+                <button className="btn-skip-text" onClick={handleSkipToPlacing}>
+                  Überspringen → nur Position raten
+                </button>
+              </div>
+            )}
+
+            {/* ── Step 2: Placement indicator ── */}
+            {phase === "placing" && (
+              <div className="placing-hint">
+                <span className="step-label">Schritt 2 von 2</span>
+                {lockedGuess && (lockedGuess.titleInput || lockedGuess.artistInput) ? (
+                  <p>
+                    Eingabe gesperrt:{" "}
+                    {lockedGuess.titleInput && <strong>„{lockedGuess.titleInput}"</strong>}
+                    {lockedGuess.titleInput && lockedGuess.artistInput && " – "}
+                    {lockedGuess.artistInput && <em>{lockedGuess.artistInput}</em>}
+                  </p>
+                ) : (
+                  <p>Keine Texteingabe — nur Position wird gewertet.</p>
+                )}
+                <p className="hint-text">Wähle jetzt die richtige Position in der Zeitleiste ↓</p>
               </div>
             )}
           </div>
@@ -418,7 +471,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
                 <p style={{ color: "var(--text-secondary)", marginBottom: "1rem", fontSize: "0.85rem" }}>
                   {deck.length} Songs verbleibend
                 </p>
-                <button className="btn" onClick={handleDrawCard}>Song ziehen</button>
+                <button className="btn" onClick={handleDrawCard}>
+                  Song ziehen
+                </button>
               </>
             ) : (
               <h2>Keine Songs mehr! 🎉</h2>
@@ -431,7 +486,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
       <div className="timeline-area">
         <Timeline
           cards={currentTimeline}
-          isPlacing={phase === "guessing"}
+          isPlacing={isPlacing}
           onPlaceCard={handlePlaceCard}
         />
       </div>
