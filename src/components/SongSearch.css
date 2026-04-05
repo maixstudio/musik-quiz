@@ -1,0 +1,135 @@
+/* ── SongSearch ── */
+
+.song-search-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  max-width: 480px;
+}
+
+.song-search-fields {
+  display: flex;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.song-search-field-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.song-search-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary, #999);
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.song-search-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  color: #fff;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.88rem;
+  padding: 0.55rem 0.75rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.song-search-input:focus {
+  border-color: var(--neon-primary, #00ffcc);
+  box-shadow: 0 0 0 2px rgba(0, 255, 204, 0.15);
+}
+
+.song-search-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Dropdown */
+.song-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+  background: #1a1a2e;
+  border: 1px solid rgba(204, 151, 255, 0.3);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  animation: fadeIn 0.12s ease-out;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.song-search-suggestion {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  transition: background 0.1s;
+  gap: 0.1rem;
+}
+
+.song-search-suggestion:hover {
+  background: rgba(204, 151, 255, 0.12);
+}
+
+.sug-title {
+  font-size: 0.88rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.sug-artist {
+  font-size: 0.75rem;
+  color: var(--neon-secondary, #cc97ff);
+}
+
+.sug-artist-main {
+  font-size: 0.88rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.sug-title-sub {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+/* Submit button */
+.song-search-btn {
+  padding: 0.6rem 1.6rem;
+  border: 1px solid var(--neon-primary, #00ffcc);
+  border-radius: 999px;
+  background: rgba(0, 255, 204, 0.08);
+  color: var(--neon-primary, #00ffcc);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+
+.song-search-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 204, 0.18);
+  box-shadow: 0 0 14px rgba(0, 255, 204, 0.3);
+  transform: scale(1.02);
+}
+
+.song-search-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
