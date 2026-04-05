@@ -4,23 +4,37 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Timeline } from "./Timeline";
 import { GameCard } from "./GameCard";
 import { SongSearch } from "./SongSearch";
+import type { GuessResult } from "./SongSearch";
 import type { Song as SearchSong } from "./SongSearch";
 import type { TimelineCard, Player } from "@/core/domain/models";
 import { supabase } from "@/infrastructure/supabase/supabaseClient";
 import { getFreshPreviewUrl } from "@/app/actions/getDeezerPreview";
 import "./GameBoard.css";
 
-// Phase machine:
+// ─── Phase machine ────────────────────────────────────────────────────────────
 // idle      → song ziehen
 // guessing  → Slot auswählen + Suche + 29s-Timer
 // flipping  → Karte dreht sich (700ms)
-// result    → Ergebnis-Box sichtbar (1s auto → animating)
+// result    → Ergebnis-Box sichtbar (auto 2s → animating)
 // animating → Karte fliegt weg (700ms) → done
-// done      → „Nächster Spieler"-Button sichtbar, Deck/Timeline sichtbar
+// done      → „Nächster Spieler"-Button sichtbar
 // switching → Vollbild-Overlay (2s auto → idle)
 type Phase = "idle" | "guessing" | "flipping" | "result" | "animating" | "done" | "switching";
 
+// ─── Scoring ──────────────────────────────────────────────────────────────────
+// Position richtig           → +1 Basispunkt
+// + Titel richtig eingegeben → +1 Bonuspunkt
+// + Interpret richtig        → +1 Bonuspunkt
+// Position falsch            → 0 Punkte (auch wenn Titel/Interpret korrekt)
+
 const GUESS_SECONDS = 29;
+
+interface ScoreBreakdown {
+  positionCorrect: boolean;
+  titleCorrect: boolean;
+  artistCorrect: boolean;
+  total: number; // 0–3
+}
 
 interface GameBoardProps {
   playlistId: string;
@@ -44,13 +58,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
-  const [placementResult, setPlacementResult] = useState<"correct" | "wrong" | null>(null);
+  const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown | null>(null);
+  const [guessResult, setGuessResult] = useState<GuessResult | null>(null);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [animClass, setAnimClass] = useState<"" | "anim-correct" | "anim-wrong">("");
-  const [turnScoreDelta, setTurnScoreDelta] = useState(0);
 
   // 29s countdown
-  const [countdown, setCountdown] = useState<number>(GUESS_SECONDS);
+  const [countdown, setCountdown] = useState(GUESS_SECONDS);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -69,10 +83,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     setCountdown(GUESS_SECONDS);
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
-        if (prev <= 1) {
-          stopCountdown();
-          return 0;
-        }
+        if (prev <= 1) { stopCountdown(); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -115,53 +126,55 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     setActiveCard(freshCard);
     setIsCardFlipped(false);
     setAnimClass("");
+    setScoreBreakdown(null);
+    setGuessResult(null);
     setPhase("guessing");
     startCountdown();
   };
 
-  // ── Place ─────────────────────────────────────────────────────────────────
-  const handlePlaceCard = useCallback((index: number, forceResult?: "correct" | "wrong") => {
+  // ── Place card (called after search OR direct timeline click) ─────────────
+  // guess is optional — if not passed, only position is scored
+  const placeCard = useCallback((
+    index: number,
+    guess?: GuessResult
+  ) => {
     if (!activeCard) return;
     stopCountdown();
+
     const currentTimeline = playerTimelines[currentPlayerIdx];
+    const prevYear = index > 0 ? currentTimeline[index - 1].song.release_year : -Infinity;
+    const nextYear = index < currentTimeline.length ? currentTimeline[index].song.release_year : Infinity;
+    const cardYear = activeCard.song.release_year;
+    const positionCorrect = cardYear >= prevYear && cardYear <= nextYear;
 
-    let isCorrect: boolean;
-    if (forceResult !== undefined) {
-      isCorrect = forceResult === "correct";
-    } else {
-      const prevYear = index > 0 ? currentTimeline[index - 1].song.release_year : -Infinity;
-      const nextYear = index < currentTimeline.length ? currentTimeline[index].song.release_year : Infinity;
-      const cardYear = activeCard.song.release_year;
-      isCorrect = cardYear >= prevYear && cardYear <= nextYear;
-    }
+    const titleCorrect = positionCorrect && !!guess?.titleCorrect;
+    const artistCorrect = positionCorrect && !!guess?.artistCorrect;
+    const total = positionCorrect ? 1 + (titleCorrect ? 1 : 0) + (artistCorrect ? 1 : 0) : 0;
 
-    log(`📍 idx=${index} → ${isCorrect ? "✅" : "❌"}`);
-    setPendingIndex(isCorrect ? index : null);
-    setPlacementResult(isCorrect ? "correct" : "wrong");
-    setTurnScoreDelta(isCorrect ? 1 : 0);
+    log(`📍 idx=${index} year=${cardYear} → pos:${positionCorrect} title:${titleCorrect} artist:${artistCorrect} total:${total}`);
+
+    const breakdown: ScoreBreakdown = { positionCorrect, titleCorrect, artistCorrect, total };
+    setScoreBreakdown(breakdown);
+    setPendingIndex(positionCorrect ? index : null);
+    setGuessResult(guess ?? null);
     audioRef.current?.pause();
 
     setIsCardFlipped(true);
     setPhase("flipping");
     clearTimer();
     timerRef.current = setTimeout(() => setPhase("result"), 700);
-  }, [activeCard, phase, playerTimelines, currentPlayerIdx, stopCountdown]);
+  }, [activeCard, playerTimelines, currentPlayerIdx, stopCountdown]);
 
-  // ── Song guessed correctly via search ────────────────────────────────────
-  const handleSongGuessed = useCallback((song: SearchSong) => {
+  // ── Timeline click (no text guess) ───────────────────────────────────────
+  const handlePlaceCard = useCallback((index: number) => {
+    if (phase !== "guessing") return;
+    placeCard(index);
+  }, [phase, placeCard]);
+
+  // ── Search submit ─────────────────────────────────────────────────────────
+  const handleSearchSubmit = useCallback((guess: GuessResult) => {
     if (!activeCard || phase !== "guessing") return;
-    const isActiveCard =
-      song.track_name.toLowerCase() === activeCard.song.track_name.toLowerCase() &&
-      song.artist.toLowerCase() === activeCard.song.artist.toLowerCase();
-
-    if (!isActiveCard) {
-      log("❌ Search match doesn't match active card — wrong guess");
-      // Treat as wrong: place at index 0 with wrong result
-      handlePlaceCard(0, "wrong");
-      return;
-    }
-    log("🎯 Correct song guessed via search!");
-    // Find best slot automatically (insert at correct chronological position)
+    // Find best chronological slot
     const timeline = playerTimelines[currentPlayerIdx];
     let bestIndex = timeline.length;
     for (let i = 0; i < timeline.length; i++) {
@@ -170,52 +183,54 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
         break;
       }
     }
-    handlePlaceCard(bestIndex, "correct");
-  }, [activeCard, phase, playerTimelines, currentPlayerIdx, handlePlaceCard]);
+    placeCard(bestIndex, guess);
+  }, [activeCard, phase, playerTimelines, currentPlayerIdx, placeCard]);
 
   // ── Dismiss result → start animation ─────────────────────────────────────
   const handleDismissResult = useCallback(() => {
     if (phase !== "result") return;
     clearTimer();
 
-    if (placementResult === "correct" && pendingIndex !== null) {
+    const isCorrect = scoreBreakdown?.positionCorrect ?? false;
+    const points = scoreBreakdown?.total ?? 0;
+
+    if (isCorrect && pendingIndex !== null) {
       setPlayerTimelines((prev) => {
         const updated = prev.map((tl) => [...tl]);
         updated[currentPlayerIdx].splice(pendingIndex, 0, { ...activeCard!, status: "revealed" });
         return updated;
       });
-      setPlayerScores((prev) => { const u = [...prev]; u[currentPlayerIdx] += 1; return u; });
-      log(`📥 +1 point for ${players[currentPlayerIdx].name}`);
+      setPlayerScores((prev) => {
+        const u = [...prev];
+        u[currentPlayerIdx] += points;
+        return u;
+      });
+      log(`📥 +${points} pts for ${players[currentPlayerIdx].name}`);
     }
 
     setPhase("animating");
-    setAnimClass(placementResult === "correct" ? "anim-correct" : "anim-wrong");
+    setAnimClass(isCorrect ? "anim-correct" : "anim-wrong");
 
     timerRef.current = setTimeout(() => {
       setActiveCard(null);
       setAnimClass("");
       setPendingIndex(null);
-      setPlacementResult(null);
       setIsCardFlipped(false);
       setPhase("done");
     }, 700);
-  }, [phase, placementResult, pendingIndex, activeCard, currentPlayerIdx, players]);
+  }, [phase, scoreBreakdown, pendingIndex, activeCard, currentPlayerIdx, players]);
 
-  // Auto-dismiss result after 1 s
+  // Auto-dismiss result after 2 s
   useEffect(() => {
     if (phase === "result") {
-      const t = setTimeout(() => handleDismissResult(), 1000);
+      const t = setTimeout(() => handleDismissResult(), 2000);
       return () => clearTimeout(t);
     }
   }, [phase, handleDismissResult]);
 
   // ── Next player ───────────────────────────────────────────────────────────
   const handleNextPlayer = () => {
-    if (players.length > 1) {
-      setPhase("switching");
-    } else {
-      setPhase("idle");
-    }
+    setPhase(players.length > 1 ? "switching" : "idle");
   };
 
   // ── Switch player ─────────────────────────────────────────────────────────
@@ -241,10 +256,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const currentPlayer = players[currentPlayerIdx];
   const prevPlayer = players[(currentPlayerIdx + players.length - 1) % players.length];
   const nextPlayer = players[(currentPlayerIdx + 1) % players.length];
-
-  // Timer ring progress (0–1)
   const timerProgress = countdown / GUESS_SECONDS;
   const timerDanger = countdown <= 10;
+  const prevPlayerScore = playerScores[(currentPlayerIdx + players.length - 1) % players.length];
+  const totalPointsThisTurn = scoreBreakdown?.total ?? 0;
 
   return (
     <div className="game-board">
@@ -267,11 +282,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
         <div className="switching-overlay" onClick={handleSwitchPlayer}>
           <div className="switching-content">
             <div className="switching-done">
-              <span className="switching-emoji">{turnScoreDelta > 0 ? "🎉" : "😬"}</span>
+              <span className="switching-emoji">{totalPointsThisTurn > 0 ? "🎉" : "😬"}</span>
               <p className="switching-prev-name">{prevPlayer.name}</p>
               <p className="switching-result-text">
-                {turnScoreDelta > 0
-                  ? `+1 Punkt! Gesamt: ${playerScores[(currentPlayerIdx + players.length - 1) % players.length]}`
+                {totalPointsThisTurn > 0
+                  ? `+${totalPointsThisTurn} Punkt${totalPointsThisTurn > 1 ? "e" : ""}! Gesamt: ${prevPlayerScore}`
                   : "Kein Punkt diese Runde"}
               </p>
             </div>
@@ -309,19 +324,35 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
             </div>
 
             {/* Result box */}
-            {phase === "result" && (
+            {phase === "result" && scoreBreakdown && (
               <div
-                className={`result-box ${placementResult}`}
+                className={`result-box ${scoreBreakdown.positionCorrect ? "correct" : "wrong"}`}
                 onClick={handleDismissResult}
               >
-                <span className="result-icon">
-                  {placementResult === "correct" ? "✅" : "❌"}
-                </span>
-                <span className="result-message">
-                  {placementResult === "correct"
-                    ? `Richtig! Erschienen ${activeCard.song.release_year}.`
-                    : `Falsch! Der Song ist von ${activeCard.song.release_year}.`}
-                </span>
+                <div className="result-breakdown">
+                  <div className="result-row">
+                    <span>{scoreBreakdown.positionCorrect ? "✅" : "❌"}</span>
+                    <span>Position{scoreBreakdown.positionCorrect ? ` (${activeCard.song.release_year})` : ` — war ${activeCard.song.release_year}`}</span>
+                    <span className="result-pts">{scoreBreakdown.positionCorrect ? "+1" : "0"}</span>
+                  </div>
+                  {guessResult && (
+                    <>
+                      <div className="result-row bonus">
+                        <span>{scoreBreakdown.titleCorrect ? "🎵" : "—"}</span>
+                        <span>Titel{scoreBreakdown.titleCorrect ? " korrekt" : guessResult.titleInput ? ` (war: ${activeCard.song.track_name})` : " nicht eingegeben"}</span>
+                        <span className="result-pts">{scoreBreakdown.titleCorrect ? "+1" : "0"}</span>
+                      </div>
+                      <div className="result-row bonus">
+                        <span>{scoreBreakdown.artistCorrect ? "🎤" : "—"}</span>
+                        <span>Interpret{scoreBreakdown.artistCorrect ? " korrekt" : guessResult.artistInput ? ` (war: ${activeCard.song.artist})` : " nicht eingegeben"}</span>
+                        <span className="result-pts">{scoreBreakdown.artistCorrect ? "+1" : "0"}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="result-total">
+                    Gesamt: <strong>{scoreBreakdown.total} Punkt{scoreBreakdown.total !== 1 ? "e" : ""}</strong>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -343,15 +374,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
               )}
             </div>
 
-            {/* Song search + placement hint */}
+            {/* Song search */}
             {phase === "guessing" && (
               <div className="guessing-zone">
                 <SongSearch
+                  activeSong={{ id: activeCard.song.id, track_name: activeCard.song.track_name, artist: activeCard.song.artist }}
                   allSongs={allSongs}
-                  onMatch={handleSongGuessed}
+                  onSubmit={handleSearchSubmit}
                 />
                 <p className="hint-text">
-                  Kennst du den Song? Gib Titel &amp; Interpret ein — oder wähle direkt einen Platz in der Zeitleiste.
+                  Titel &amp; Interpret eingeben — oder direkt Position in der Zeitleiste wählen.
                 </p>
               </div>
             )}
@@ -361,8 +393,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
             {phase === "done" ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
                 <p className="turn-result-summary">
-                  {turnScoreDelta > 0
-                    ? `🎉 +1 Punkt für ${currentPlayer.name}!`
+                  {totalPointsThisTurn > 0
+                    ? `🎉 +${totalPointsThisTurn} Punkt${totalPointsThisTurn > 1 ? "e" : ""} für ${currentPlayer.name}!`
                     : `😬 Kein Punkt für ${currentPlayer.name}.`}
                 </p>
                 {players.length > 1 ? (

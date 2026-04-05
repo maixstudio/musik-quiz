@@ -287,39 +287,68 @@
   transform-origin: center center;
 }
 
-/* Result box — compact pill below the card */
+/* Result box — breakdown layout */
 .result-box {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.7rem 1.4rem;
-  border-radius: 999px;
+  padding: 1rem 1.4rem;
+  border-radius: 0.8rem;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.6) both;
   border: 1px solid transparent;
+  min-width: 280px;
+  max-width: 420px;
 }
 
 .result-box.correct {
-  background: rgba(0, 220, 100, 0.18);
-  border-color: rgba(0, 220, 100, 0.5);
-  color: #a0ffcc;
+  background: rgba(0, 220, 100, 0.12);
+  border-color: rgba(0, 220, 100, 0.4);
 }
 
 .result-box.wrong {
-  background: rgba(255, 60, 60, 0.18);
-  border-color: rgba(255, 60, 60, 0.5);
-  color: #ffaaaa;
+  background: rgba(255, 60, 60, 0.12);
+  border-color: rgba(255, 60, 60, 0.4);
 }
 
-.result-box .result-icon {
-  font-size: 1.4rem;
+.result-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
-.result-box .result-message {
-  font-size: 0.95rem;
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.result-row.bonus {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  padding-left: 0.4rem;
+}
+
+.result-row span:last-child {
+  margin-left: auto;
+}
+
+.result-pts {
+  font-weight: bold;
+  font-size: 0.88rem;
+  color: var(--neon-primary);
+  min-width: 1.8rem;
+  text-align: right;
+}
+
+.result-total {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  text-align: right;
 }
 
 /* Done state — next player button */
