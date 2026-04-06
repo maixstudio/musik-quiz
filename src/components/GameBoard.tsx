@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Timeline } from "./Timeline";
 import { GameCard } from "./GameCard";
-import { SongVerifier } from "./SongVerifier";
+import { SongVerifier, type NamingResult } from "./SongVerifier";
 import type { TimelineCard, Player } from "@/core/domain/models";
 import { supabase } from "@/infrastructure/supabase/supabaseClient";
 import { getFreshPreviewUrl } from "@/app/actions/getDeezerPreview";
@@ -44,7 +44,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [animClass, setAnimClass] = useState<"" | "anim-correct" | "anim-wrong">("");
   const [turnScoreDelta, setTurnScoreDelta] = useState(0);
-  const [nameCorrect, setNameCorrect] = useState<boolean | null>(null);
+  const [namingResult, setNamingResult] = useState<NamingResult | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,14 +89,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     setActiveCard(freshCard);
     setIsCardFlipped(false);
     setAnimClass("");
-    setNameCorrect(null);
+    setNamingResult(null);
     setPhase("naming");
   };
 
   // ── Naming result ─────────────────────────────────────────────────────────
-  const handleNamingResult = (isValid: boolean) => {
-    log(`🤖 Naming result: ${isValid ? "✅ correct" : "❌ wrong"}`);
-    setNameCorrect(isValid);
+  const handleNamingResult = (result: NamingResult) => {
+    log(`🤖 Naming result: title=${result.titleCorrect ? "✅" : "❌"} artist=${result.artistCorrect ? "✅" : "❌"}`);
+    setNamingResult(result);
     setPhase("guessing");
   };
 
@@ -108,13 +108,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     const nextYear = index < currentTimeline.length ? currentTimeline[index].song.release_year : Infinity;
     const cardYear = activeCard.song.release_year;
     const isCorrect = cardYear >= prevYear && cardYear <= nextYear;
-    const namingPoint = nameCorrect ? 1 : 0;
+    const titlePoint = namingResult?.titleCorrect ? 1 : 0;
+    const artistPoint = namingResult?.artistCorrect ? 1 : 0;
     const placementPoint = isCorrect ? 1 : 0;
 
-    log(`📍 idx=${index} year=${cardYear} → ${isCorrect ? "✅" : "❌"} | naming: ${nameCorrect ? "✅" : "❌"}`);
+    log(`📍 idx=${index} year=${cardYear} → ${isCorrect ? "✅" : "❌"} | title:${titlePoint} artist:${artistPoint}`);
     setPendingIndex(isCorrect ? index : null);
     setPlacementResult(isCorrect ? "correct" : "wrong");
-    setTurnScoreDelta(namingPoint + placementPoint);
+    setTurnScoreDelta(titlePoint + artistPoint + placementPoint);
     audioRef.current?.pause();
 
     // 1. Flip card
@@ -244,25 +245,51 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
               <div
                 className={`result-box ${placementResult}`}
                 onClick={handleDismissResult}
+                style={{ cursor: "pointer", textAlign: "left" }}
               >
-                <span className="result-icon">
-                  {placementResult === "correct" ? "✅" : "❌"}
-                </span>
-                <span className="result-message">
-                  {placementResult === "correct"
-                    ? `Jahr richtig! +1`
-                    : `Falsches Jahr — ${activeCard.song.release_year}.`}
-                  {nameCorrect !== null && (
-                    <span style={{ display: "block", marginTop: "0.25rem" }}>
-                      {nameCorrect ? "Song erkannt! +1" : "Song nicht erkannt."}
+                {/* Jahr */}
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <span style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
+                    {placementResult === "correct" ? "✅ Jahr richtig!" : "❌ Jahr falsch"}
+                  </span>
+                  <div style={{ fontSize: "0.9rem", color: "#ccc", marginTop: "0.2rem", display: "flex", gap: "1.5rem" }}>
+                    <span>Tatsächlich: <strong style={{ color: "#cc97ff" }}>{activeCard.song.release_year}</strong></span>
+                  </div>
+                </div>
+
+                {/* Titel */}
+                {namingResult && (
+                  <div style={{ marginBottom: "0.4rem", fontSize: "0.9rem" }}>
+                    <span style={{ color: namingResult.titleCorrect ? "#8aff8a" : "#ff8a8a", fontWeight: "bold" }}>
+                      {namingResult.titleCorrect ? "✓" : "✗"} Titel
                     </span>
-                  )}
-                  {turnScoreDelta > 0 && (
-                    <span style={{ display: "block", marginTop: "0.25rem", fontWeight: "bold" }}>
-                      Gesamt: +{turnScoreDelta} Punkt{turnScoreDelta > 1 ? "e" : ""}
+                    <div style={{ color: "#ccc", paddingLeft: "1.2rem" }}>
+                      <div>Du: <em>{namingResult.titleInput || "—"}</em></div>
+                      <div>Richtig: <strong>{activeCard.song.track_name}</strong></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Interpret */}
+                {namingResult && (
+                  <div style={{ marginBottom: "0.75rem", fontSize: "0.9rem" }}>
+                    <span style={{ color: namingResult.artistCorrect ? "#8aff8a" : "#ff8a8a", fontWeight: "bold" }}>
+                      {namingResult.artistCorrect ? "✓" : "✗"} Interpret
                     </span>
-                  )}
-                </span>
+                    <div style={{ color: "#ccc", paddingLeft: "1.2rem" }}>
+                      <div>Du: <em>{namingResult.artistInput || "—"}</em></div>
+                      <div>Richtig: <strong>{activeCard.song.artist}</strong></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Punkte */}
+                <div style={{ borderTop: "1px solid #444", paddingTop: "0.5rem", fontWeight: "bold", fontSize: "1rem" }}>
+                  {turnScoreDelta > 0
+                    ? `+${turnScoreDelta} Punkt${turnScoreDelta > 1 ? "e" : ""} diese Runde`
+                    : "0 Punkte diese Runde"}
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#666", marginTop: "0.3rem" }}>Tippen zum Weiter</div>
               </div>
             )}
 
@@ -285,7 +312,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
             </div>
 
             {phase === "naming" && (
-              <SongVerifier onResult={handleNamingResult} />
+              <SongVerifier song={activeCard.song} onResult={handleNamingResult} />
             )}
 
             {phase === "guessing" && (
