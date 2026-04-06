@@ -45,6 +45,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const [animClass, setAnimClass] = useState<"" | "anim-correct" | "anim-wrong">("");
   const [turnScoreDelta, setTurnScoreDelta] = useState(0);
   const [namingResult, setNamingResult] = useState<NamingResult | null>(null);
+  const [titleOverride, setTitleOverride] = useState<boolean>(false);
+  const [artistOverride, setArtistOverride] = useState<boolean>(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,6 +99,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const handleNamingResult = (result: NamingResult) => {
     log(`🤖 Naming result: title=${result.titleCorrect ? "✅" : "❌"} artist=${result.artistCorrect ? "✅" : "❌"}`);
     setNamingResult(result);
+    setTitleOverride(result.titleCorrect);
+    setArtistOverride(result.artistCorrect);
     setPhase("guessing");
   };
 
@@ -108,14 +112,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     const nextYear = index < currentTimeline.length ? currentTimeline[index].song.release_year : Infinity;
     const cardYear = activeCard.song.release_year;
     const isCorrect = cardYear >= prevYear && cardYear <= nextYear;
-    const titlePoint = namingResult?.titleCorrect ? 1 : 0;
-    const artistPoint = namingResult?.artistCorrect ? 1 : 0;
-    const placementPoint = isCorrect ? 1 : 0;
 
-    log(`📍 idx=${index} year=${cardYear} → ${isCorrect ? "✅" : "❌"} | title:${titlePoint} artist:${artistPoint}`);
+    log(`📍 idx=${index} year=${cardYear} → ${isCorrect ? "✅" : "❌"}`);
     setPendingIndex(isCorrect ? index : null);
     setPlacementResult(isCorrect ? "correct" : "wrong");
-    setTurnScoreDelta(titlePoint + artistPoint + placementPoint);
+    // turnScoreDelta is calculated on dismiss (after toggle overrides)
     audioRef.current?.pause();
 
     // 1. Flip card
@@ -130,6 +131,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     if (phase !== "result") return;
     clearTimer();
 
+    const finalScore = (titleOverride ? 1 : 0) + (artistOverride ? 1 : 0) + (placementResult === "correct" ? 1 : 0);
+    setTurnScoreDelta(finalScore);
+
     // Commit score & timeline
     if (placementResult === "correct" && pendingIndex !== null) {
       setPlayerTimelines((prev) => {
@@ -138,9 +142,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
         return updated;
       });
     }
-    if (turnScoreDelta > 0) {
-      setPlayerScores((prev) => { const u = [...prev]; u[currentPlayerIdx] += turnScoreDelta; return u; });
-      log(`📥 +${turnScoreDelta} point(s) for ${players[currentPlayerIdx].name}`);
+    if (finalScore > 0) {
+      setPlayerScores((prev) => { const u = [...prev]; u[currentPlayerIdx] += finalScore; return u; });
+      log(`📥 +${finalScore} point(s) for ${players[currentPlayerIdx].name}`);
     }
 
     // Start fly animation
@@ -155,7 +159,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
       setIsCardFlipped(false);
       setPhase("done");
     }, 700);
-  }, [phase, placementResult, pendingIndex, activeCard, currentPlayerIdx, players]);
+  }, [phase, placementResult, pendingIndex, activeCard, currentPlayerIdx, players, titleOverride, artistOverride]);
 
   // Result stays visible until user clicks
 
@@ -242,54 +246,77 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
 
             {/* Result box — sits BELOW the card, not over it */}
             {phase === "result" && (
-              <div
-                className={`result-box ${placementResult}`}
-                onClick={handleDismissResult}
-                style={{ cursor: "pointer", textAlign: "left" }}
-              >
+              <div className={`result-box ${placementResult}`} style={{ textAlign: "left" }}>
+
                 {/* Jahr */}
-                <div style={{ marginBottom: "0.75rem" }}>
+                <div style={{ marginBottom: "0.75rem", paddingBottom: "0.6rem", borderBottom: "1px solid #444" }}>
                   <span style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
                     {placementResult === "correct" ? "✅ Jahr richtig!" : "❌ Jahr falsch"}
                   </span>
-                  <div style={{ fontSize: "0.9rem", color: "#ccc", marginTop: "0.2rem", display: "flex", gap: "1.5rem" }}>
-                    <span>Tatsächlich: <strong style={{ color: "#cc97ff" }}>{activeCard.song.release_year}</strong></span>
+                  <div style={{ fontSize: "0.9rem", color: "#ccc", marginTop: "0.2rem" }}>
+                    Tatsächlich: <strong style={{ color: "#cc97ff" }}>{activeCard.song.release_year}</strong>
                   </div>
                 </div>
 
-                {/* Titel */}
+                {/* Titel mit Toggle */}
                 {namingResult && (
-                  <div style={{ marginBottom: "0.4rem", fontSize: "0.9rem" }}>
-                    <span style={{ color: namingResult.titleCorrect ? "#8aff8a" : "#ff8a8a", fontWeight: "bold" }}>
-                      {namingResult.titleCorrect ? "✓" : "✗"} Titel
-                    </span>
-                    <div style={{ color: "#ccc", paddingLeft: "1.2rem" }}>
-                      <div>Du: <em>{namingResult.titleInput || "—"}</em></div>
-                      <div>Richtig: <strong>{activeCard.song.track_name}</strong></div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", marginBottom: "0.6rem", fontSize: "0.9rem" }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); setTitleOverride(v => !v); }}
+                      style={{
+                        padding: "0.25rem 0.5rem", fontSize: "1rem", flexShrink: 0,
+                        background: titleOverride ? "#1a3a1a" : "#3a1a1a",
+                        border: `1px solid ${titleOverride ? "#4caf50" : "#f44336"}`,
+                        borderRadius: "4px", cursor: "pointer",
+                        color: titleOverride ? "#8aff8a" : "#ff8a8a", fontWeight: "bold",
+                      }}
+                      title="Klicken zum Ändern"
+                    >
+                      {titleOverride ? "✓" : "✗"}
+                    </button>
+                    <div>
+                      <div style={{ color: "#aaa" }}>Titel</div>
+                      <div style={{ color: "#fff" }}>Du: <em>{namingResult.titleInput || "—"}</em></div>
+                      <div style={{ color: "#ccc" }}>Richtig: <strong>{activeCard.song.track_name}</strong></div>
                     </div>
                   </div>
                 )}
 
-                {/* Interpret */}
+                {/* Interpret mit Toggle */}
                 {namingResult && (
-                  <div style={{ marginBottom: "0.75rem", fontSize: "0.9rem" }}>
-                    <span style={{ color: namingResult.artistCorrect ? "#8aff8a" : "#ff8a8a", fontWeight: "bold" }}>
-                      {namingResult.artistCorrect ? "✓" : "✗"} Interpret
-                    </span>
-                    <div style={{ color: "#ccc", paddingLeft: "1.2rem" }}>
-                      <div>Du: <em>{namingResult.artistInput || "—"}</em></div>
-                      <div>Richtig: <strong>{activeCard.song.artist}</strong></div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", marginBottom: "0.75rem", fontSize: "0.9rem" }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); setArtistOverride(v => !v); }}
+                      style={{
+                        padding: "0.25rem 0.5rem", fontSize: "1rem", flexShrink: 0,
+                        background: artistOverride ? "#1a3a1a" : "#3a1a1a",
+                        border: `1px solid ${artistOverride ? "#4caf50" : "#f44336"}`,
+                        borderRadius: "4px", cursor: "pointer",
+                        color: artistOverride ? "#8aff8a" : "#ff8a8a", fontWeight: "bold",
+                      }}
+                      title="Klicken zum Ändern"
+                    >
+                      {artistOverride ? "✓" : "✗"}
+                    </button>
+                    <div>
+                      <div style={{ color: "#aaa" }}>Interpret</div>
+                      <div style={{ color: "#fff" }}>Du: <em>{namingResult.artistInput || "—"}</em></div>
+                      <div style={{ color: "#ccc" }}>Richtig: <strong>{activeCard.song.artist}</strong></div>
                     </div>
                   </div>
                 )}
 
-                {/* Punkte */}
-                <div style={{ borderTop: "1px solid #444", paddingTop: "0.5rem", fontWeight: "bold", fontSize: "1rem" }}>
-                  {turnScoreDelta > 0
-                    ? `+${turnScoreDelta} Punkt${turnScoreDelta > 1 ? "e" : ""} diese Runde`
-                    : "0 Punkte diese Runde"}
-                </div>
-                <div style={{ fontSize: "0.75rem", color: "#666", marginTop: "0.3rem" }}>Tippen zum Weiter</div>
+                {/* Weiter Button */}
+                <button
+                  onClick={handleDismissResult}
+                  style={{
+                    width: "100%", padding: "0.75rem", fontSize: "1rem",
+                    background: "#cc97ff", color: "#000", border: "none",
+                    borderRadius: "6px", fontWeight: "bold", cursor: "pointer", marginTop: "0.25rem",
+                  }}
+                >
+                  Weiter →
+                </button>
               </div>
             )}
 

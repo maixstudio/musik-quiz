@@ -2,21 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export interface VerifySongRequest {
-  title: string;
-  artist: string;
+  titleInput: string;
+  artistInput: string;
+  correctTitle: string;
+  correctArtist: string;
 }
 
 export interface VerifySongResponse {
-  isValid: boolean;
-  correctedTitle?: string;
-  correctedArtist?: string;
-  release_year?: number;
-  note?: string;
+  titleCorrect: boolean;
+  artistCorrect: boolean;
 }
 
 export async function POST(req: NextRequest) {
   const body: VerifySongRequest = await req.json();
-  const { title, artist } = body;
+  const { titleInput, artistInput, correctTitle, correctArtist } = body;
 
   const apiKey = process.env.GOOGLE_AI_API_KEY;
   if (!apiKey) {
@@ -26,32 +25,29 @@ export async function POST(req: NextRequest) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  const prompt = `You are a music expert. A user has entered a song title and artist name, possibly with typos or misspellings.
+  const prompt = `You are judging a music quiz. A player tried to guess the song title and artist.
 
-User input:
-- Title: "${title}"
-- Artist: "${artist}"
+Correct title: "${correctTitle}"
+Correct artist: "${correctArtist}"
 
-Determine if this is a real, identifiable song. Be tolerant of typos, alternate spellings, and minor mistakes.
+Player's title input: "${titleInput || ""}"
+Player's artist input: "${artistInput || ""}"
 
-Respond ONLY with a JSON object, no markdown, no explanation:
-{
-  "isValid": true_or_false,
-  "correctedTitle": "correct title if found, else null",
-  "correctedArtist": "correct artist name if found, else null",
-  "release_year": original_release_year_as_number_or_null,
-  "note": "optional short note"
-}`;
+Rules:
+- Be tolerant of typos, phonetic misspellings, and minor errors (e.g. "charma chamelia" → "Karma Chameleon" = correct, "smels like teen sprit" → "Smells Like Teen Spirit" = correct)
+- If the input is clearly a different song or artist, mark as wrong
+- Empty input is always wrong
+- Partial artist names are acceptable if unambiguous (e.g. "Bowie" → "David Bowie" = correct)
+
+Respond ONLY with JSON, no explanation:
+{"titleCorrect": true_or_false, "artistCorrect": true_or_false}`;
 
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-
     console.log("[verify-song] Gemini response:", text);
-
     const jsonText = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
     const parsed: VerifySongResponse = JSON.parse(jsonText);
-
     return NextResponse.json(parsed);
   } catch (err) {
     console.error("[verify-song] Error:", err);
