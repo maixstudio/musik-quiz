@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Papa from 'papaparse';
 import { searchDeezerTrack } from '@/infrastructure/deezer/DeezerService';
 import { supabase } from '@/infrastructure/supabase/supabaseClient';
@@ -11,17 +11,20 @@ async function enrichSongWithAI(
   track_name: string,
   artist: string,
   release_year: number
-): Promise<EnrichSongResponse | null> {
+): Promise<{ data: EnrichSongResponse | null; error: string | null }> {
   try {
     const res = await fetch('/api/enrich-song', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ track_name, artist, release_year }),
     });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
+    const json = await res.json();
+    if (!res.ok) {
+      return { data: null, error: json.error || json.details || `HTTP ${res.status}` };
+    }
+    return { data: json, error: null };
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -30,11 +33,18 @@ export const CsvImporter: React.FC = () => {
     const [logs, setLogs] = useState<string[]>([]);
     const [isImporting, setIsImporting] = useState(false);
     const [playlistName, setPlaylistName] = useState("New Playlist");
+    const abortRef = useRef(false);
 
     const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
+    const handleAbort = () => {
+        abortRef.current = true;
+        addLog("⛔ Import wird abgebrochen...");
+    };
+
     const handleImport = async () => {
         if (!file) return;
+        abortRef.current = false;
         setIsImporting(true);
         setLogs([]);
         addLog("Starting import...");
@@ -44,7 +54,8 @@ export const CsvImporter: React.FC = () => {
             skipEmptyLines: true,
             complete: async (results) => {
                 const rows = results.data as any[];
-                addLog(`Parsed ${rows.length} rows from CSV.`);
+                addLog(`✅ Parsed ${rows.length} rows from CSV.`);
+                addLog(`Processing will begin...`);
 
                 // 1. Create Playlist
                 const { data: playlistData, error: playlistError } = await supabase
@@ -62,6 +73,7 @@ export const CsvImporter: React.FC = () => {
                 addLog(`Created playlist: "${playlistData.name}" (${playlistData.id})`);
 
                 // 2. Process each row
+                let processedCount = 0;
                 for (const row of rows) {
                     // Expecting columns: track_name, artist, genre (optional)
                     const trackName = row.track_name || row.title || row.song || row['Track Name'];
@@ -69,9 +81,17 @@ export const CsvImporter: React.FC = () => {
                     const genre = row.genre || row.Genres || null;
 
                     if (!trackName || !artist) {
-                        addLog(`Skipping invalid row: missing track or artist. ${JSON.stringify(row)}`);
+                        addLog(`⏭️ Row ${processedCount + 1}: Skipping — missing track or artist`);
                         continue;
                     }
+
+                    processedCount++;
+                    if (abortRef.current) {
+                        addLog(`⛔ Import abgebrochen nach ${processedCount - 1} Songs.`);
+                        setIsImporting(false);
+                        return;
+                    }
+                    addLog(`---`);
 
                     let csvYear = null;
                     const csvReleaseDate = row.release_date || row['Release Date'];
@@ -86,31 +106,43 @@ export const CsvImporter: React.FC = () => {
                     }
 
                     if (!csvYear) {
-                        addLog(`Skipping row: missing valid release year. ${trackName} by ${artist}`);
+                        addLog(`⏭️ Row ${processedCount}: Skipping — missing valid release year`);
                         continue;
                     }
 
-                    addLog(`Searching Deezer for: "${trackName}" by ${artist}...`);
+                    addLog(`Row ${processedCount}: 🔍 Deezer lookup: "${trackName}" by "${artist}"...`);
                     const deezerData = await searchDeezerTrack(trackName, artist);
 
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
                     if (!deezerData) {
-                        addLog(`⚠️ Could not find Deezer data for: "${trackName}" by ${artist}. Skipping.`);
+                        addLog(`Row ${processedCount}: ⚠️ Deezer not found. Skipping.`);
                         continue;
                     }
+
+                    addLog(`Row ${processedCount}: ✅ Deezer found — "${deezerData.track_name}" by "${deezerData.artist}"`);
 
                     // KI-Bereinigung
                     const rawTitle = deezerData.track_name || trackName;
                     const rawArtist = deezerData.artist || artist;
-                    addLog(`🤖 Enriching with AI: "${rawTitle}" by ${rawArtist}...`);
-                    const aiData = await enrichSongWithAI(rawTitle, rawArtist, csvYear);
+                    addLog(`Row ${processedCount}: 🤖 AI enriching...`);
+                    const { data: aiData, error: aiError } = await enrichSongWithAI(rawTitle, rawArtist, csvYear);
 
-                    if (!aiData) {
-                        addLog(`⚠️ AI enrichment failed for "${rawTitle}". Using raw data.`);
+                    // Small delay after AI call
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    if (aiError) {
+                        addLog(`Row ${processedCount}: ⚠️ AI error: ${aiError}. Using raw data.`);
+                    } else if (!aiData) {
+                        addLog(`Row ${processedCount}: ⚠️ AI returned empty response. Using raw data.`);
                     } else if (!aiData.found) {
-                        addLog(`⚠️ AI could not verify "${rawTitle}" by ${rawArtist} — ${aiData.note || 'not found in knowledge base'}. Skipping.`);
+                        addLog(`Row ${processedCount}: ❌ AI: Song not found in knowledge base. Skipping.`);
+                        if (aiData.note) addLog(`       Note: ${aiData.note}`);
                         continue;
                     } else {
-                        if (aiData.note) addLog(`ℹ️ AI note: ${aiData.note}`);
+                        addLog(`Row ${processedCount}: ✅ AI verified. Categories: ${aiData.categories}`);
+                        if (aiData.note) addLog(`       AI note: ${aiData.note}`);
                     }
 
                     const finalTitle = aiData?.found ? aiData.track_name : rawTitle;
@@ -132,11 +164,11 @@ export const CsvImporter: React.FC = () => {
                     };
 
                     const { error: insertError } = await supabase.from('songs').insert([songPayload]);
-                    
+
                     if (insertError) {
-                        addLog(`Error inserting song "${trackName}": ${insertError.message}`);
+                        addLog(`Row ${processedCount}: ❌ DB Insert failed: ${insertError.message}`);
                     } else {
-                        addLog(`✅ Successfully added "${songPayload.track_name}" (${songPayload.release_year})`);
+                        addLog(`Row ${processedCount}: ✅ DB saved — "${songPayload.track_name}" (${songPayload.release_year})`);
                     }
                 }
 
@@ -167,13 +199,23 @@ export const CsvImporter: React.FC = () => {
                     onChange={e => setFile(e.target.files?.[0] || null)} 
                     style={{ padding: '0.5rem', background: '#0e0e0e', color: '#fff', border: '1px solid #555' }}
                 />
-                <button 
-                    onClick={handleImport} 
-                    disabled={!file || isImporting}
-                    style={{ padding: '0.75rem', background: isImporting ? '#555' : '#cc97ff', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
-                >
-                    {isImporting ? "Importing..." : "Start Import"}
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                        onClick={handleImport}
+                        disabled={!file || isImporting}
+                        style={{ flex: 1, padding: '0.75rem', background: isImporting ? '#555' : '#cc97ff', color: '#000', border: 'none', cursor: isImporting ? 'default' : 'pointer', fontWeight: 'bold' }}
+                    >
+                        {isImporting ? "Importing..." : "Start Import"}
+                    </button>
+                    {isImporting && (
+                        <button
+                            onClick={handleAbort}
+                            style={{ padding: '0.75rem 1.25rem', background: '#ff4444', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            ⛔ Abbrechen
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div style={{ background: '#0e0e0e', padding: '1rem', height: '400px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.85rem' }}>

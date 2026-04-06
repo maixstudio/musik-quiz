@@ -156,13 +156,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     }, 700);
   }, [phase, placementResult, pendingIndex, activeCard, currentPlayerIdx, players]);
 
-  // Auto-dismiss result after 1 s
-  useEffect(() => {
-    if (phase === "result") {
-      const t = setTimeout(() => handleDismissResult(), 1000);
-      return () => clearTimeout(t);
-    }
-  }, [phase, handleDismissResult]);
+  // Result stays visible until user clicks
 
   // ── Next player ───────────────────────────────────────────────────────────
   const handleNextPlayer = () => {

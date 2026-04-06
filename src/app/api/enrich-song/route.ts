@@ -70,13 +70,19 @@ Respond ONLY with a JSON object, no markdown, no explanation:
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 
+    console.log("[enrich-song] Gemini response:", text);
+
     // Strip possible markdown code fences
     const jsonText = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
     const parsed: EnrichSongResponse = JSON.parse(jsonText);
 
+    console.log("[enrich-song] Parsed response:", parsed);
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error("Gemini enrich error:", err);
-    return NextResponse.json({ error: "AI enrichment failed" }, { status: 500 });
+    console.error("[enrich-song] Error:", err);
+    return NextResponse.json(
+      { error: "AI enrichment failed", details: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

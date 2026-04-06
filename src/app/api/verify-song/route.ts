@@ -47,12 +47,17 @@ Respond ONLY with a JSON object, no markdown, no explanation:
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 
+    console.log("[verify-song] Gemini response:", text);
+
     const jsonText = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
     const parsed: VerifySongResponse = JSON.parse(jsonText);
 
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error("Gemini verify error:", err);
-    return NextResponse.json({ error: "AI verification failed" }, { status: 500 });
+    console.error("[verify-song] Error:", err);
+    return NextResponse.json(
+      { error: "AI verification failed", details: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
