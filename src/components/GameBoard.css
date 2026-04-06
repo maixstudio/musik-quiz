@@ -184,7 +184,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
   animation: floatIn 0.5s ease-out;
 }
 
@@ -196,6 +196,70 @@
 .audio-controls {
   display: flex;
   gap: 1rem;
+}
+
+/* ── Countdown Ring ── */
+.countdown-ring {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.countdown-svg {
+  width: 56px;
+  height: 56px;
+  transform: rotate(-90deg);
+}
+
+.countdown-bg {
+  fill: none;
+  stroke: rgba(255,255,255,0.08);
+  stroke-width: 3;
+}
+
+.countdown-progress {
+  fill: none;
+  stroke: var(--neon-primary, #00ffcc);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.9s linear, stroke 0.3s;
+}
+
+.countdown-ring.danger .countdown-progress {
+  stroke: #ff4466;
+  animation: dangerPulse 0.6s infinite ease-in-out;
+}
+
+.countdown-number {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+
+.countdown-ring.danger .countdown-number {
+  color: #ff4466;
+}
+
+@keyframes dangerPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+/* ── Guessing zone (search + hint) ── */
+.guessing-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 480px;
 }
 
 .empty-play-area {
@@ -223,39 +287,68 @@
   transform-origin: center center;
 }
 
-/* Result box — compact pill below the card */
+/* Result box — breakdown layout */
 .result-box {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.7rem 1.4rem;
-  border-radius: 999px;
+  padding: 1rem 1.4rem;
+  border-radius: 0.8rem;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.6) both;
   border: 1px solid transparent;
+  min-width: 280px;
+  max-width: 420px;
 }
 
 .result-box.correct {
-  background: rgba(0, 220, 100, 0.18);
-  border-color: rgba(0, 220, 100, 0.5);
-  color: #a0ffcc;
+  background: rgba(0, 220, 100, 0.12);
+  border-color: rgba(0, 220, 100, 0.4);
 }
 
 .result-box.wrong {
-  background: rgba(255, 60, 60, 0.18);
-  border-color: rgba(255, 60, 60, 0.5);
-  color: #ffaaaa;
+  background: rgba(255, 60, 60, 0.12);
+  border-color: rgba(255, 60, 60, 0.4);
 }
 
-.result-box .result-icon {
-  font-size: 1.4rem;
+.result-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
-.result-box .result-message {
-  font-size: 0.95rem;
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.result-row.bonus {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  padding-left: 0.4rem;
+}
+
+.result-row span:last-child {
+  margin-left: auto;
+}
+
+.result-pts {
+  font-weight: bold;
+  font-size: 0.88rem;
+  color: var(--neon-primary);
+  min-width: 1.8rem;
+  text-align: right;
+}
+
+.result-total {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  text-align: right;
 }
 
 /* Done state — next player button */
@@ -288,8 +381,61 @@
   color: var(--text-secondary);
   font-size: 0.85rem;
   text-align: center;
-  max-width: 300px;
+  max-width: 320px;
   opacity: 0.7;
+  margin: 0;
+}
+
+/* Step labels & placing indicator */
+.step-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--neon-secondary, #cc97ff);
+  font-family: 'Space Grotesk', sans-serif;
+  margin-bottom: 0.3rem;
+}
+
+.placing-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.8rem 1.2rem;
+  background: rgba(204, 151, 255, 0.07);
+  border: 1px solid rgba(204, 151, 255, 0.25);
+  border-radius: 0.75rem;
+  max-width: 380px;
+  text-align: center;
+  animation: popIn 0.25s ease-out;
+}
+
+.placing-hint p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.placing-hint strong {
+  color: var(--neon-primary);
+}
+
+/* Skip-to-placing button */
+.btn-skip-text {
+  background: none;
+  border: 1px dashed rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.45);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.btn-skip-text:hover {
+  border-color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.7);
 }
 
 @keyframes fadeIn {
