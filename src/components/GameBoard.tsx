@@ -3,19 +3,21 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Timeline } from "./Timeline";
 import { GameCard } from "./GameCard";
+import { SongVerifier } from "./SongVerifier";
 import type { TimelineCard, Player } from "@/core/domain/models";
 import { supabase } from "@/infrastructure/supabase/supabaseClient";
 import { getFreshPreviewUrl } from "@/app/actions/getDeezerPreview";
 import "./GameBoard.css";
 
 // idle      → song ziehen
+// naming    → Titel + Interpret eingeben (KI prüft)
 // guessing  → Slot auswählen
 // flipping  → Karte dreht sich (700ms)
 // result    → Ergebnis-Box sichtbar (1s auto → animating)
 // animating → Karte fliegt weg (700ms) → done
 // done      → "Nächster Spieler"-Button sichtbar, Deck/Timeline sichtbar
 // switching → Vollbild-Overlay (2s auto → idle)
-type Phase = "idle" | "guessing" | "flipping" | "result" | "animating" | "done" | "switching";
+type Phase = "idle" | "naming" | "guessing" | "flipping" | "result" | "animating" | "done" | "switching";
 
 interface GameBoardProps {
   playlistId: string;
@@ -42,6 +44,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [animClass, setAnimClass] = useState<"" | "anim-correct" | "anim-wrong">("");
   const [turnScoreDelta, setTurnScoreDelta] = useState(0);
+  const [nameCorrect, setNameCorrect] = useState<boolean | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,6 +89,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     setActiveCard(freshCard);
     setIsCardFlipped(false);
     setAnimClass("");
+    setNameCorrect(null);
+    setPhase("naming");
+  };
+
+  // ── Naming result ─────────────────────────────────────────────────────────
+  const handleNamingResult = (isValid: boolean) => {
+    log(`🤖 Naming result: ${isValid ? "✅ correct" : "❌ wrong"}`);
+    setNameCorrect(isValid);
     setPhase("guessing");
   };
 
@@ -97,11 +108,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     const nextYear = index < currentTimeline.length ? currentTimeline[index].song.release_year : Infinity;
     const cardYear = activeCard.song.release_year;
     const isCorrect = cardYear >= prevYear && cardYear <= nextYear;
+    const namingPoint = nameCorrect ? 1 : 0;
+    const placementPoint = isCorrect ? 1 : 0;
 
-    log(`📍 idx=${index} year=${cardYear} → ${isCorrect ? "✅" : "❌"}`);
+    log(`📍 idx=${index} year=${cardYear} → ${isCorrect ? "✅" : "❌"} | naming: ${nameCorrect ? "✅" : "❌"}`);
     setPendingIndex(isCorrect ? index : null);
     setPlacementResult(isCorrect ? "correct" : "wrong");
-    setTurnScoreDelta(isCorrect ? 1 : 0);
+    setTurnScoreDelta(namingPoint + placementPoint);
     audioRef.current?.pause();
 
     // 1. Flip card
@@ -116,15 +129,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
     if (phase !== "result") return;
     clearTimer();
 
-    // Commit score & timeline immediately if correct
+    // Commit score & timeline
     if (placementResult === "correct" && pendingIndex !== null) {
       setPlayerTimelines((prev) => {
         const updated = prev.map((tl) => [...tl]);
         updated[currentPlayerIdx].splice(pendingIndex, 0, { ...activeCard!, status: "revealed" });
         return updated;
       });
-      setPlayerScores((prev) => { const u = [...prev]; u[currentPlayerIdx] += 1; return u; });
-      log(`📥 +1 point for ${players[currentPlayerIdx].name}`);
+    }
+    if (turnScoreDelta > 0) {
+      setPlayerScores((prev) => { const u = [...prev]; u[currentPlayerIdx] += turnScoreDelta; return u; });
+      log(`📥 +${turnScoreDelta} point(s) for ${players[currentPlayerIdx].name}`);
     }
 
     // Start fly animation
@@ -241,8 +256,18 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
                 </span>
                 <span className="result-message">
                   {placementResult === "correct"
-                    ? `Richtig! Erschienen ${activeCard.song.release_year}.`
-                    : `Falsch! Der Song ist von ${activeCard.song.release_year}.`}
+                    ? `Jahr richtig! +1`
+                    : `Falsches Jahr — ${activeCard.song.release_year}.`}
+                  {nameCorrect !== null && (
+                    <span style={{ display: "block", marginTop: "0.25rem" }}>
+                      {nameCorrect ? "Song erkannt! +1" : "Song nicht erkannt."}
+                    </span>
+                  )}
+                  {turnScoreDelta > 0 && (
+                    <span style={{ display: "block", marginTop: "0.25rem", fontWeight: "bold" }}>
+                      Gesamt: +{turnScoreDelta} Punkt{turnScoreDelta > 1 ? "e" : ""}
+                    </span>
+                  )}
                 </span>
               </div>
             )}
@@ -264,6 +289,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
                 </span>
               )}
             </div>
+
+            {phase === "naming" && (
+              <SongVerifier onResult={handleNamingResult} />
+            )}
 
             {phase === "guessing" && (
               <p className="hint-text">Wähle in der Zeitleiste die richtige Position</p>

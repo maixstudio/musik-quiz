@@ -5,6 +5,25 @@ import Papa from 'papaparse';
 import { searchDeezerTrack } from '@/infrastructure/deezer/DeezerService';
 import { supabase } from '@/infrastructure/supabase/supabaseClient';
 import type { Song } from '@/core/domain/models';
+import type { EnrichSongResponse } from '@/app/api/enrich-song/route';
+
+async function enrichSongWithAI(
+  track_name: string,
+  artist: string,
+  release_year: number
+): Promise<EnrichSongResponse | null> {
+  try {
+    const res = await fetch('/api/enrich-song', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_name, artist, release_year }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
 
 export const CsvImporter: React.FC = () => {
     const [file, setFile] = useState<File | null>(null);
@@ -79,14 +98,34 @@ export const CsvImporter: React.FC = () => {
                         continue;
                     }
 
+                    // KI-Bereinigung
+                    const rawTitle = deezerData.track_name || trackName;
+                    const rawArtist = deezerData.artist || artist;
+                    addLog(`🤖 Enriching with AI: "${rawTitle}" by ${rawArtist}...`);
+                    const aiData = await enrichSongWithAI(rawTitle, rawArtist, csvYear);
+
+                    if (!aiData) {
+                        addLog(`⚠️ AI enrichment failed for "${rawTitle}". Using raw data.`);
+                    } else if (!aiData.found) {
+                        addLog(`⚠️ AI could not verify "${rawTitle}" by ${rawArtist} — ${aiData.note || 'not found in knowledge base'}. Skipping.`);
+                        continue;
+                    } else {
+                        if (aiData.note) addLog(`ℹ️ AI note: ${aiData.note}`);
+                    }
+
+                    const finalTitle = aiData?.found ? aiData.track_name : rawTitle;
+                    const finalArtist = aiData?.found ? aiData.artist : rawArtist;
+                    const finalYear = aiData?.found ? aiData.release_year : csvYear;
+                    const finalCategories = aiData?.found ? aiData.categories : (genre || null);
+
                     // Prepare DB payload
                     const songPayload = {
                         playlist_id: playlistData.id,
-                        track_name: deezerData.track_name || trackName,
-                        artist: deezerData.artist || artist,
-                        release_year: csvYear,
+                        track_name: finalTitle,
+                        artist: finalArtist,
+                        release_year: finalYear,
                         album: deezerData.album,
-                        genre: genre,
+                        genre: finalCategories,
                         cover_url: deezerData.cover_url,
                         preview_url: deezerData.preview_url,
                         deezer_id: deezerData.deezer_id
