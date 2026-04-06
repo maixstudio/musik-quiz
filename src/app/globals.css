@@ -24,6 +24,7 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -92,6 +93,24 @@ h1, h2, h3, h4, h5, h6 {
   padding: 1rem 2rem;
   background: var(--surface-raised);
   border-bottom: 1px solid var(--ghost-border);
+}
+
+@media (max-width: 640px) {
+  .global-nav {
+    padding: 0.6rem 1rem;
+  }
+
+  .nav-logo {
+    font-size: 1rem;
+  }
+
+  .nav-links {
+    gap: 1rem;
+  }
+
+  .nav-links a {
+    font-size: 0.85rem;
+  }
 }
 
 .nav-logo {

@@ -198,7 +198,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
   const nextPlayer = players[(currentPlayerIdx + 1) % players.length];
 
   return (
-    <div className="game-board">
+    <div className="game-board" data-phase={phase}>
       {/* ── Header ── */}
       <header className="game-header">
         <h1 className="neon-text title">The Neon Archivist</h1>
@@ -386,14 +386,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ playlistId, players, onEnd
         )}
       </div>
 
-      {/* ── Timeline (current player only) ── */}
-      <div className="timeline-area">
-        <Timeline
-          cards={currentTimeline}
-          isPlacing={phase === "guessing"}
-          onPlaceCard={handlePlaceCard}
-        />
-      </div>
+      {/* ── Timeline — hidden during naming & idle ── */}
+      {phase !== "naming" && phase !== "idle" && (
+        <div className="timeline-area">
+          <Timeline
+            cards={currentTimeline}
+            isPlacing={phase === "guessing"}
+            onPlaceCard={handlePlaceCard}
+          />
+        </div>
+      )}
     </div>
   );
 };

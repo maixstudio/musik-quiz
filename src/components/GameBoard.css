@@ -452,3 +452,100 @@
   0%, 100% { opacity: 0.55; }
   50%       { opacity: 1; }
 }
+
+/* ═══════════════════════════════════════════════
+   MOBILE — fills the viewport, no scrolling
+   ═══════════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  .game-board {
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  /* ── Header compact ── */
+  .game-header {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .game-header .title {
+    font-size: 0.85rem;
+  }
+
+  .score-chip {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .score-points {
+    width: 1.2rem;
+    height: 1.2rem;
+    font-size: 0.7rem;
+  }
+
+  /* ── Play area scrollable if needed ── */
+  .play-area {
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-top: 0;
+    padding: 0.75rem;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .active-card-container {
+    gap: 0.6rem;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* ── Result box as full-width card ── */
+  .result-box {
+    min-width: unset;
+    max-width: unset;
+    width: 100%;
+  }
+
+  /* ── Empty play area ── */
+  .empty-play-area {
+    padding: 1.5rem;
+    margin: 0;
+    width: 100%;
+    border-radius: 1rem;
+  }
+
+  .player-prompt {
+    font-size: 1rem;
+  }
+
+  /* ── Timeline area takes remaining grid row ── */
+  .timeline-area {
+    margin-top: 0;
+    padding-bottom: 0.5rem;
+    overflow: hidden;
+  }
+
+  /* ── Hint text ── */
+  .hint-text {
+    font-size: 0.8rem;
+  }
+
+  /* ── Done / Next player ── */
+  .turn-result-summary {
+    font-size: 1rem;
+  }
+
+  .btn-next-player {
+    font-size: 0.95rem;
+    padding: 0.7rem 1.4rem;
+  }
+
+  /* ── Switching overlay ── */
+  .switching-next-name {
+    font-size: 2rem;
+  }
+}
