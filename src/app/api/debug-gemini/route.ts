@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent("Say hello in one word.");
     const text = result.response.text();
     return NextResponse.json({ ok: true, keyPreview, response: text });
